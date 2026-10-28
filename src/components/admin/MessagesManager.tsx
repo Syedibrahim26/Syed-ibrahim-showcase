@@ -18,6 +18,7 @@ export const MessagesManager: React.FC<MessagesManagerProps> = ({ messages, onRe
     (m) =>
       m.sender_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.sender_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.sender_phone || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.subject && m.subject.toLowerCase().includes(searchQuery.toLowerCase())) ||
       m.message.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -127,6 +128,7 @@ export const MessagesManager: React.FC<MessagesManagerProps> = ({ messages, onRe
                   </div>
 
                   <div className="text-xs text-zinc-500 truncate mt-0.5">{msg.sender_email}</div>
+                  {msg.sender_phone && <div className="text-xs text-zinc-500 truncate">{msg.sender_phone}</div>}
 
                   <div className="text-xs text-zinc-800 font-medium mt-1 truncate">
                     {msg.subject || 'No subject'}
@@ -152,6 +154,9 @@ export const MessagesManager: React.FC<MessagesManagerProps> = ({ messages, onRe
                     <span className="font-semibold text-zinc-800">{selectedMessage.sender_name}</span>
                     <span>&lt;{selectedMessage.sender_email}&gt;</span>
                   </div>
+                  {selectedMessage.sender_phone && (
+                    <div className="text-xs text-zinc-500 mt-1">Phone: {selectedMessage.sender_phone}</div>
+                  )}
                   <div className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     <span>{new Date(selectedMessage.created_at).toLocaleString()}</span>

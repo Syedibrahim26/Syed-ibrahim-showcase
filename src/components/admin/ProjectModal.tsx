@@ -252,10 +252,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, isOpen, onC
                 <ImageIcon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   id="project-image-url"
-                  type="url"
+                  type="text"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://... or /uploads/..."
                   className="w-full pl-9 pr-3.5 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
@@ -264,8 +264,22 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, isOpen, onC
               <label className="px-3.5 py-2 rounded-xl border border-zinc-200 bg-white text-zinc-700 text-xs font-medium hover:bg-zinc-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs">
                 <Upload className="w-3.5 h-3.5" />
                 <span>Upload</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/bmp"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
               </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="px-3.5 py-2 rounded-xl border border-red-200 bg-white text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
             </div>
 
             {/* Quick preset images selector */}

@@ -100,7 +100,7 @@ export const api = {
   },
 
   messages: {
-    submit: (data: { name: string; email: string; subject?: string; message: string }) =>
+    submit: (data: { name: string; email: string; phone?: string; subject?: string; message: string }) =>
       request<{ success: boolean; message: string }>('/api/contact', {
         method: 'POST',
         body: JSON.stringify(data)
@@ -125,6 +125,11 @@ export const api = {
       request<{ success: boolean; url: string }>('/api/admin/upload', {
         method: 'POST',
         body: JSON.stringify({ image, filename })
+      }),
+    uploadResume: (file: string) =>
+      request<{ success: boolean; url: string }>('/api/admin/upload-resume', {
+        method: 'POST',
+        body: JSON.stringify({ file })
       })
   },
 

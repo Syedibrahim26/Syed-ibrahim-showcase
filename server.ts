@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import cookieParser from 'cookie-parser';
 import bcrypt from 'bcryptjs';
+import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { dbRun, dbGet, dbAll, initDatabase } from './src/server/db';
 import { generateToken, requireAuth, AuthenticatedRequest } from './src/server/auth';
@@ -13,8 +15,8 @@ async function startServer() {
   const app = express();
 
   // Basic middlewares
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
   app.use(cookieParser());
 
   // Initialize SQLite database and seed admin credentials if needed
@@ -30,6 +32,46 @@ async function startServer() {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
+
+  const normalizeImageUrl = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+
+    const url = value.trim();
+    if (!url || /^file:/i.test(url) || /^[a-z]:[\\/]/i.test(url) || /^\\\\/.test(url)) return '';
+
+    const uploadPath = url.match(/^\/?uploads\/+(.+)$/i);
+    return uploadPath ? `/uploads/${uploadPath[1].replace(/^\/+/, '')}` : url;
+  };
+
+  const parseStoredArray = <T>(value: unknown): T[] => {
+    if (typeof value !== 'string' || !value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.error('Failed to parse stored profile list:', err);
+      return [];
+    }
+  };
+
+  const removeUnusedUpload = async (imageUrl: string) => {
+    const normalizedUrl = normalizeImageUrl(imageUrl);
+    const match = normalizedUrl.match(/^\/uploads\/((?:upload_[a-zA-Z0-9_-]+\.(?:jpe?g|png|gif|webp|avif|bmp)|resume_[a-zA-Z0-9_-]+\.pdf))$/i);
+    if (!match) return;
+
+    const references = await dbAll<any>(
+      'SELECT avatar_url AS image_url FROM profile UNION ALL SELECT resume_url FROM profile UNION ALL SELECT image_url FROM projects'
+    );
+    if (references.some((reference) => normalizeImageUrl(reference.image_url) === normalizedUrl)) return;
+
+    try {
+      await fs.promises.unlink(path.join(uploadsDir, match[1]));
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') {
+        console.error(`Failed to remove unused uploaded image ${match[1]}:`, err);
+      }
+    }
+  };
 
   // ==========================================
   // API ROUTES
@@ -134,7 +176,11 @@ async function startServer() {
 
       return res.json({
         ...profile,
-        skills: parsedSkills
+        avatar_url: normalizeImageUrl(profile.avatar_url),
+        resume_url: normalizeImageUrl(profile.resume_url),
+        skills: parsedSkills,
+        education: parseStoredArray(profile.education),
+        certificates: parseStoredArray(profile.certificates)
       });
     } catch (err: any) {
       console.error('Get profile error:', err);
@@ -159,6 +205,7 @@ async function startServer() {
 
         return {
           ...p,
+          image_url: normalizeImageUrl(p.image_url),
           tech_stack: parsedTech,
           is_published: Boolean(p.is_published),
           is_featured: Boolean(p.is_featured)
@@ -194,6 +241,7 @@ async function startServer() {
 
       return res.json({
         ...project,
+        image_url: normalizeImageUrl(project.image_url),
         tech_stack: parsedTech,
         is_published: Boolean(project.is_published),
         is_featured: Boolean(project.is_featured)
@@ -207,8 +255,11 @@ async function startServer() {
   app.post('/api/contact', async (req, res) => {
     try {
       const { name, email, subject, message } = req.body;
+      const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+      const subjectText = typeof subject === 'string' ? subject.replace(/[\r\n]+/g, ' ').trim() : '';
 
-      if (!name || !email || !message) {
+      if (typeof name !== 'string' || typeof email !== 'string' || typeof message !== 'string' ||
+          !name.trim() || !email.trim() || !message.trim()) {
         return res.status(400).json({ error: 'Name, email, and message are required fields.' });
       }
 
@@ -217,11 +268,59 @@ async function startServer() {
       if (!emailRegex.test(email.trim())) {
         return res.status(400).json({ error: 'Please provide a valid email address.' });
       }
+      if ((subject !== undefined && typeof subject !== 'string') || phone.length > 40 ||
+          name.trim().length > 150 || subjectText.length > 200 ||
+          message.trim().length > 5000) {
+        return res.status(400).json({ error: 'Please keep the contact details within the allowed length.' });
+      }
 
       await dbRun(
-        'INSERT INTO messages (sender_name, sender_email, subject, message) VALUES (?, ?, ?, ?)',
-        [name.trim(), email.trim(), (subject || '').trim(), message.trim()]
+        'INSERT INTO messages (sender_name, sender_email, sender_phone, subject, message) VALUES (?, ?, ?, ?, ?)',
+        [name.trim(), email.trim(), phone, subjectText, message.trim()]
       );
+
+      const smtpHost = process.env.SMTP_HOST?.trim();
+      const smtpUser = process.env.SMTP_USER?.trim();
+      const smtpPass = process.env.SMTP_PASS;
+      const recipient = process.env.CONTACT_EMAIL_TO?.trim() || 'rajarafic49@gmail.com';
+      const from = process.env.EMAIL_FROM?.trim() || smtpUser;
+      const port = Number(process.env.SMTP_PORT || 587);
+
+      if (!smtpHost || !smtpUser || !smtpPass || !from || !recipient || !Number.isInteger(port) || port < 1 || port > 65535) {
+        return res.status(503).json({
+          error: 'Your message was saved to the admin inbox, but email delivery is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and EMAIL_FROM in the server environment.'
+        });
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port,
+        secure: process.env.SMTP_SECURE?.toLowerCase() === 'true' || port === 465,
+        auth: { user: smtpUser, pass: smtpPass }
+      });
+
+      try {
+        await transporter.sendMail({
+          from,
+          to: recipient,
+          replyTo: email.trim(),
+          subject: `Portfolio message: ${subjectText || 'New contact'}`,
+          text: [
+            `Name: ${name.trim()}`,
+            `Email: ${email.trim()}`,
+            `Phone: ${phone || 'Not provided'}`,
+            `Subject: ${subjectText || 'No subject'}`,
+            '',
+            'Message:',
+            message.trim()
+          ].join('\n')
+        });
+      } catch (mailError) {
+        console.error('Contact email delivery failed:', mailError);
+        return res.status(502).json({
+          error: 'Your message was saved to the admin inbox, but email delivery failed. Please try again later.'
+        });
+      }
 
       return res.json({ success: true, message: 'Your message has been sent successfully!' });
     } catch (err: any) {
@@ -289,6 +388,7 @@ async function startServer() {
 
         return {
           ...p,
+          image_url: normalizeImageUrl(p.image_url),
           tech_stack: parsedTech,
           is_published: Boolean(p.is_published),
           is_featured: Boolean(p.is_featured)
@@ -324,6 +424,9 @@ async function startServer() {
       if (!short_description || !short_description.trim()) {
         return res.status(400).json({ error: 'Short description is required.' });
       }
+      if (image_url && !normalizeImageUrl(image_url)) {
+        return res.status(400).json({ error: 'Choose an image with Upload; local file paths are not accessible to visitors.' });
+      }
 
       // Convert tech_stack to JSON string
       let techStackString = '[]';
@@ -351,7 +454,7 @@ async function startServer() {
           short_description.trim(),
           (detailed_description || '').trim(),
           techStackString,
-          (image_url || '').trim(),
+          normalizeImageUrl(image_url),
           (live_demo_url || '').trim(),
           (github_url || '').trim(),
           publishedVal,
@@ -366,6 +469,7 @@ async function startServer() {
         message: 'Project created successfully.',
         project: {
           ...created,
+          image_url: normalizeImageUrl(created.image_url),
           tech_stack: JSON.parse(created.tech_stack || '[]'),
           is_published: Boolean(created.is_published),
           is_featured: Boolean(created.is_featured)
@@ -409,6 +513,9 @@ async function startServer() {
       if (!short_description || !short_description.trim()) {
         return res.status(400).json({ error: 'Short description is required.' });
       }
+      if (image_url && !normalizeImageUrl(image_url)) {
+        return res.status(400).json({ error: 'Choose an image with Upload; local file paths are not accessible to visitors.' });
+      }
 
       let techStackString = existing.tech_stack;
       if (Array.isArray(tech_stack)) {
@@ -437,7 +544,7 @@ async function startServer() {
           short_description.trim(),
           (detailed_description || '').trim(),
           techStackString,
-          (image_url !== undefined ? image_url : existing.image_url || '').trim(),
+          image_url !== undefined ? normalizeImageUrl(image_url) : normalizeImageUrl(existing.image_url),
           (live_demo_url !== undefined ? live_demo_url : existing.live_demo_url || '').trim(),
           (github_url !== undefined ? github_url : existing.github_url || '').trim(),
           publishedVal,
@@ -447,12 +554,14 @@ async function startServer() {
         ]
       );
 
+      await removeUnusedUpload(existing.image_url || '');
       const updated = await dbGet<any>('SELECT * FROM projects WHERE id = ?', [id]);
       return res.json({
         success: true,
         message: 'Project updated successfully.',
         project: {
           ...updated,
+          image_url: normalizeImageUrl(updated.image_url),
           tech_stack: JSON.parse(updated.tech_stack || '[]'),
           is_published: Boolean(updated.is_published),
           is_featured: Boolean(updated.is_featured)
@@ -501,12 +610,13 @@ async function startServer() {
         return res.status(400).json({ error: 'Invalid project ID.' });
       }
 
-      const existing = await dbGet<any>('SELECT title FROM projects WHERE id = ?', [id]);
+      const existing = await dbGet<any>('SELECT title, image_url FROM projects WHERE id = ?', [id]);
       if (!existing) {
         return res.status(404).json({ error: 'Project not found.' });
       }
 
       await dbRun('DELETE FROM projects WHERE id = ?', [id]);
+      await removeUnusedUpload(existing.image_url || '');
       return res.json({ success: true, message: `Project "${existing.title}" deleted permanently.` });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to delete project.' });
@@ -527,7 +637,9 @@ async function startServer() {
         twitter_url,
         website_url,
         resume_url,
-        skills
+        skills,
+        education,
+        certificates
       } = req.body;
 
       if (!name || !name.trim()) {
@@ -549,56 +661,76 @@ async function startServer() {
         );
       }
 
-      const existing = await dbGet<any>('SELECT id FROM profile LIMIT 1');
+      const educationString = JSON.stringify(Array.isArray(education) ? education : []);
+      const certificatesString = JSON.stringify(Array.isArray(certificates) ? certificates : []);
+      const existing = await dbGet<any>('SELECT id, avatar_url, resume_url FROM profile LIMIT 1');
+      if (avatar_url && !normalizeImageUrl(avatar_url)) {
+        return res.status(400).json({ error: 'Choose an image with Upload; local file paths are not accessible to visitors.' });
+      }
+      if (resume_url && !normalizeImageUrl(resume_url)) {
+        return res.status(400).json({ error: 'Upload your resume PDF or use a public resume URL; local file paths are not accessible to visitors.' });
+      }
       if (existing) {
         await dbRun(
           `UPDATE profile 
            SET name = ?, title = ?, bio = ?, avatar_url = ?, email = ?,
                github_url = ?, linkedin_url = ?, twitter_url = ?, website_url = ?,
-               resume_url = ?, skills = ?, updated_at = CURRENT_TIMESTAMP
+               resume_url = ?, skills = ?, education = ?, certificates = ?, updated_at = CURRENT_TIMESTAMP
            WHERE id = ?`,
           [
             name.trim(),
             title.trim(),
             (bio || '').trim(),
-            (avatar_url || '').trim(),
+            normalizeImageUrl(avatar_url),
             (email || '').trim(),
             (github_url || '').trim(),
             (linkedin_url || '').trim(),
             (twitter_url || '').trim(),
             (website_url || '').trim(),
-            (resume_url || '').trim(),
+            normalizeImageUrl(resume_url),
             skillsString,
+            educationString,
+            certificatesString,
             existing.id
           ]
         );
       } else {
         await dbRun(
-          `INSERT INTO profile (name, title, bio, avatar_url, email, github_url, linkedin_url, twitter_url, website_url, resume_url, skills)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO profile (name, title, bio, avatar_url, email, github_url, linkedin_url, twitter_url, website_url, resume_url, skills, education, certificates)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             name.trim(),
             title.trim(),
             (bio || '').trim(),
-            (avatar_url || '').trim(),
+            normalizeImageUrl(avatar_url),
             (email || '').trim(),
             (github_url || '').trim(),
             (linkedin_url || '').trim(),
             (twitter_url || '').trim(),
             (website_url || '').trim(),
-            (resume_url || '').trim(),
-            skillsString
+            normalizeImageUrl(resume_url),
+            skillsString,
+            educationString,
+            certificatesString
           ]
         );
       }
 
+      if (existing) await removeUnusedUpload(existing.avatar_url || '');
+      if (existing && normalizeImageUrl(existing.resume_url) !== normalizeImageUrl(resume_url)) {
+        await removeUnusedUpload(existing.resume_url || '');
+      }
       const updated = await dbGet<any>('SELECT * FROM profile ORDER BY id DESC LIMIT 1');
       return res.json({
         success: true,
         message: 'Profile updated successfully.',
         profile: {
           ...updated,
-          skills: JSON.parse(updated.skills || '[]')
+          avatar_url: normalizeImageUrl(updated.avatar_url),
+          resume_url: normalizeImageUrl(updated.resume_url),
+          skills: JSON.parse(updated.skills || '[]'),
+          education: parseStoredArray(updated.education),
+          certificates: parseStoredArray(updated.certificates)
         }
       });
     } catch (err: any) {
@@ -729,33 +861,50 @@ async function startServer() {
   // Admin: Image Upload endpoint (accepts file or base64 data URI)
   app.post('/api/admin/upload', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const { image, filename } = req.body;
-      if (!image) {
+      const { image } = req.body;
+      if (typeof image !== 'string' || !image) {
         return res.status(400).json({ error: 'No image data provided.' });
       }
 
-      // If it's a data URL, we can save it to /public/uploads/ or return it
-      if (image.startsWith('data:image/')) {
-        const matches = image.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
-        if (matches) {
-          const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-          const base64Data = matches[2];
-          const safeFilename = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
-          const filePath = path.join(uploadsDir, safeFilename);
-
-          fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-          return res.json({
-            success: true,
-            url: `/uploads/${safeFilename}`
-          });
-        }
+      const matches = image.match(/^data:image\/(jpeg|jpg|png|gif|webp|avif|bmp);base64,([A-Za-z0-9+/]+={0,2})$/i);
+      if (!matches) {
+        return res.status(400).json({ error: 'Upload a JPEG, PNG, GIF, WebP, AVIF, or BMP image.' });
       }
 
-      // If already a URL, return as is
-      return res.json({ success: true, url: image });
+      const ext = matches[1].toLowerCase() === 'jpeg' ? 'jpg' : matches[1].toLowerCase();
+      const imageData = Buffer.from(matches[2], 'base64');
+      if (!imageData.length || imageData.length > 10 * 1024 * 1024) {
+        return res.status(400).json({ error: 'Image file must be under 10MB.' });
+      }
+
+      const safeFilename = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+      await fs.promises.writeFile(path.join(uploadsDir, safeFilename), imageData, { flag: 'wx' });
+      return res.json({ success: true, url: `/uploads/${safeFilename}` });
     } catch (err: any) {
       console.error('Upload error:', err);
       return res.status(500).json({ error: 'Failed to process image upload.' });
+    }
+  });
+
+  app.post('/api/admin/upload-resume', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { file } = req.body;
+      const match = typeof file === 'string' && file.match(/^data:application\/pdf;base64,([A-Za-z0-9+/]+={0,2})$/i);
+      if (!match) {
+        return res.status(400).json({ error: 'Upload a valid PDF resume.' });
+      }
+
+      const pdfData = Buffer.from(match[1], 'base64');
+      if (pdfData.length < 5 || pdfData.length > 10 * 1024 * 1024 || pdfData.subarray(0, 5).toString() !== '%PDF-') {
+        return res.status(400).json({ error: 'Resume PDF must be valid and under 10MB.' });
+      }
+
+      const filename = `resume_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
+      await fs.promises.writeFile(path.join(uploadsDir, filename), pdfData, { flag: 'wx' });
+      return res.json({ success: true, url: `/uploads/${filename}` });
+    } catch (err) {
+      console.error('Resume upload error:', err);
+      return res.status(500).json({ error: 'Failed to upload resume PDF.' });
     }
   });
 

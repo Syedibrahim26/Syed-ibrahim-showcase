@@ -42,7 +42,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ profile, onExploreClic
                   animationsEnabled ? 'animate-gradient-flow' : ''
                 } shadow-2xl transition-transform duration-300 group-hover:scale-[1.02]`}
               >
-                <div className={`w-32 h-32 sm:w-40 sm:h-40 rounded-[22px] overflow-hidden ${isLight ? 'bg-zinc-100' : 'bg-zinc-900'} relative`}>
+                <div className={`w-40 h-40 sm:w-48 sm:h-48 rounded-[26px] overflow-hidden ${isLight ? 'bg-zinc-100' : 'bg-zinc-900'} relative`}>
                   <img
                     src={avatarUrl}
                     alt={name}

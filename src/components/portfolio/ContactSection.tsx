@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Send, CheckCircle2, AlertCircle, MessageSquare, MapPin, Clock, Sparkles } from 'lucide-react';
+import { Mail, Send, CheckCircle2, AlertCircle, MessageSquare, MapPin, Clock, Sparkles, Phone } from 'lucide-react';
 import { Profile } from '../../types';
 import { api } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
@@ -13,6 +13,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
     subject: '',
     message: ''
   });
@@ -35,7 +36,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
     try {
       await api.messages.submit(formData);
       setSubmitted(true);
-      setFormData({ name: '', email: '', subject: '', message: '' });
+      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send message. Please try again or reach out directly.');
     } finally {
@@ -128,7 +129,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
                     Location
                   </div>
                   <div className={`font-semibold text-sm ${isLight ? 'text-zinc-900' : 'text-white'}`}>
-                    San Francisco Bay Area • Open to Remote
+                    Tamil Nadu,India • Open to Remote
                   </div>
                 </div>
               </div>
@@ -181,7 +182,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
                       isLight ? 'text-zinc-600' : 'text-zinc-300'
                     }`}
                   >
-                    Thank you for reaching out. Your note has been delivered to the CMS inbox and I will get back to you shortly.
+                    Thank you for reaching out. Your message has been delivered to the portfolio inbox and email.
                   </p>
                   <button
                     onClick={() => setSubmitted(false)}
@@ -224,7 +225,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
                         required
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Jane Doe"
+                        placeholder="Your Name"
                         className={`w-full px-3.5 py-2.5 text-sm rounded-xl border focus:outline-none transition-all shadow-xs backdrop-blur-md ${
                           isLight
                             ? 'bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:ring-2 focus:ring-violet-500'
@@ -248,8 +249,35 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
                         required
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="jane@example.com"
+                        placeholder="yourmail@example.com"
                         className={`w-full px-3.5 py-2.5 text-sm rounded-xl border focus:outline-none transition-all shadow-xs backdrop-blur-md ${
+                          isLight
+                            ? 'bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:ring-2 focus:ring-violet-500'
+                            : 'bg-white/10 border-white/15 text-white placeholder:text-zinc-500 focus:ring-2 focus:ring-violet-400 focus:border-transparent'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="contact-phone"
+                      className={`block text-xs font-semibold mb-1.5 ${
+                        isLight ? 'text-zinc-700' : 'text-zinc-300'
+                      }`}
+                    >
+                      Phone (optional)
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <input
+                        id="contact-phone"
+                        type="tel"
+                        maxLength={40}
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="Your phone number"
+                        className={`w-full pl-9 pr-3.5 py-2.5 text-sm rounded-xl border focus:outline-none transition-all shadow-xs backdrop-blur-md ${
                           isLight
                             ? 'bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:ring-2 focus:ring-violet-500'
                             : 'bg-white/10 border-white/15 text-white placeholder:text-zinc-500 focus:ring-2 focus:ring-violet-400 focus:border-transparent'
@@ -296,7 +324,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ profile }) => {
                       required
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      placeholder="Hello Alex, I came across your portfolio and wanted to discuss..."
+                      placeholder="Hello Syed, I came across your portfolio and wanted to discuss..."
                       className={`w-full px-3.5 py-2.5 text-sm rounded-xl border focus:outline-none transition-all shadow-xs backdrop-blur-md resize-none ${
                         isLight
                           ? 'bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:ring-2 focus:ring-violet-500'

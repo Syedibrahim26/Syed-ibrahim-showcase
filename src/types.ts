@@ -20,7 +20,24 @@ export interface Profile {
   website_url: string;
   resume_url: string;
   skills: string[]; // JSON parsed
+  education: EducationEntry[];
+  certificates: Certificate[];
   updated_at?: string;
+}
+
+export interface EducationEntry {
+  degree: string;
+  institution: string;
+  period: string;
+  details: string;
+}
+
+export interface Certificate {
+  title: string;
+  issuer: string;
+  year: string;
+  description: string;
+  credential_url: string;
 }
 
 export interface Project {
@@ -43,6 +60,7 @@ export interface Message {
   id: number;
   sender_name: string;
   sender_email: string;
+  sender_phone?: string;
   subject?: string;
   message: string;
   created_at: string;

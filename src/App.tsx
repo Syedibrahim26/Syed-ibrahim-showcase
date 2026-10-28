@@ -6,6 +6,7 @@ import { Navbar } from './components/portfolio/Navbar';
 import { HeroSection } from './components/portfolio/HeroSection';
 import { ProjectsGallery } from './components/portfolio/ProjectsGallery';
 import { AboutSkillsSection } from './components/portfolio/AboutSkillsSection';
+import { CertificatesSection } from './components/portfolio/CertificatesSection';
 import { ContactSection } from './components/portfolio/ContactSection';
 import { Footer } from './components/portfolio/Footer';
 import { LoginPage } from './components/auth/LoginPage';
@@ -173,6 +174,8 @@ function MainApp() {
         <AboutSkillsSection
           profile={profile}
         />
+
+        <CertificatesSection profile={profile} />
 
         <ContactSection
           profile={profile}

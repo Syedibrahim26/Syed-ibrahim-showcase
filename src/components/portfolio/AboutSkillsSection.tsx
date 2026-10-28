@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Award, BookOpen, GraduationCap, Cpu, Code2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, Cpu, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Profile } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -63,46 +63,40 @@ export const AboutSkillsSection: React.FC<AboutSkillsSectionProps> = ({ profile 
               I am a dedicated Computer Science student committed to continuous learning and building reliable, user-centric software. My projects range from client-side visualizers to distributed backends with robust database architectures.
             </p>
 
-            {/* Academic Card with animated gradient border */}
-            <div
-              className={`relative p-[1.5px] rounded-2xl bg-gradient-to-tr ${theme.accentGradient} ${
-                animationsEnabled ? 'animate-gradient-flow' : ''
-              } shadow-lg`}
-            >
+            {(profile?.education || []).map((entry, index) => (
               <div
-                className={`p-5 rounded-[15px] backdrop-blur-xl ${
-                  isLight ? 'bg-white/95' : 'bg-zinc-950/90'
-                } space-y-3`}
+                key={`${entry.degree}-${index}`}
+                className={`relative p-[1.5px] rounded-2xl bg-gradient-to-tr ${theme.accentGradient} ${
+                  animationsEnabled ? 'animate-gradient-flow' : ''
+                } shadow-lg`}
               >
-                <div className="flex items-start gap-3.5">
-                  <div
-                    className={`p-2.5 rounded-xl text-white shadow-md bg-gradient-to-tr ${theme.accentGradient}`}
-                  >
-                    <GraduationCap className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3
-                      className={`font-bold text-base leading-snug ${
-                        isLight ? 'text-zinc-900' : 'text-white'
-                      }`}
-                    >
-                      B.S. in Computer Science
-                    </h3>
-                    <div
-                      className={`text-xs mt-0.5 ${
-                        isLight ? 'text-zinc-500' : 'text-zinc-400'
-                      }`}
-                    >
-                      Faculty of Engineering & Computer Science
+                <div className={`p-5 rounded-[15px] backdrop-blur-xl ${isLight ? 'bg-white/95' : 'bg-zinc-950/90'}`}>
+                  <div className="flex items-start gap-3.5">
+                    <div className={`p-2.5 rounded-xl text-white shadow-md bg-gradient-to-tr ${theme.accentGradient}`}>
+                      <GraduationCap className="w-5 h-5" />
                     </div>
-                    <div className="text-xs font-semibold text-emerald-400 mt-2 inline-flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Expected Graduation: 2026</span> • <span>Dean's Honor List</span>
+                    <div className="min-w-0">
+                      <h3 className={`font-bold text-base leading-snug ${isLight ? 'text-zinc-900' : 'text-white'}`}>
+                        {entry.degree}
+                      </h3>
+                      {entry.institution && (
+                        <div className={`text-xs mt-0.5 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          {entry.institution}
+                        </div>
+                      )}
+                      {(entry.period || entry.details) && (
+                        <div className="text-xs font-semibold text-emerald-400 mt-2 inline-flex items-center gap-1.5 flex-wrap">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {entry.period && <span>{entry.period}</span>}
+                          {entry.period && entry.details && <span>•</span>}
+                          {entry.details && <span>{entry.details}</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ))}
 
             {/* Focus areas */}
             <div className="space-y-2.5 pt-2">
@@ -122,7 +116,7 @@ export const AboutSkillsSection: React.FC<AboutSkillsSectionProps> = ({ profile 
                   }`}
                 >
                   <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></div>
-                  Full-Stack Web Systems
+                  Full-Stack Web Application
                 </div>
                 <div
                   className={`flex items-center gap-2 p-2.5 rounded-xl border backdrop-blur-md ${
@@ -206,16 +200,13 @@ export const AboutSkillsSection: React.FC<AboutSkillsSectionProps> = ({ profile 
               ))}
             </div>
 
-            {/* Quick note */}
-            <div
-              className={`p-4 rounded-2xl border border-dashed text-xs flex items-center gap-3 backdrop-blur-md ${
-                isLight
-                  ? 'border-zinc-300 bg-zinc-50/50 text-zinc-600'
-                  : 'border-white/20 bg-white/[0.03] text-zinc-300'
-              }`}
-            >
-              <Terminal className="w-4 h-4 text-violet-400 flex-shrink-0" />
-              <span>All skills and profile data are managed dynamically via the integrated Admin CMS.</span>
+            <div className="space-y-2 pt-2">
+              <div className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                Key Strengths
+              </div>
+              <p className={`text-sm leading-relaxed ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+                Strong Communication <span className="text-violet-400">•</span> Quick Learner <span className="text-violet-400">•</span> Problem Solving <span className="text-violet-400">•</span> Team Collaboration <span className="text-violet-400">•</span> Self-Motivated <span className="text-violet-400">•</span> Adaptability
+              </p>
             </div>
           </div>
         </div>

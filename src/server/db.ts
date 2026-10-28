@@ -4,6 +4,17 @@ import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
 const DB_PATH = path.resolve(process.cwd(), 'portfolio.sqlite');
+const DEFAULT_EDUCATION = [{
+  degree: 'B.S. in Computer Science',
+  institution: 'Faculty of Engineering & Computer Science',
+  period: 'Expected Graduation: 2026',
+  details: "Dean's Honor List"
+}];
+const DEFAULT_CERTIFICATES = [
+  { title: 'Full Stack Development', issuer: '', year: '', description: '', credential_url: '' },
+  { title: 'Web Development', issuer: '', year: '', description: '', credential_url: '' },
+  { title: 'Naan Mudhalvan skill Development', issuer: '', year: '', description: '', credential_url: '' }
+];
 
 let dbInstance: SqlJsDatabase | null = null;
 
@@ -131,6 +142,8 @@ export async function initDatabase(): Promise<void> {
       website_url TEXT,
       resume_url TEXT,
       skills TEXT,
+      education TEXT NOT NULL DEFAULT '[]',
+      certificates TEXT NOT NULL DEFAULT '[]',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -160,12 +173,50 @@ export async function initDatabase(): Promise<void> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sender_name TEXT NOT NULL,
       sender_email TEXT NOT NULL,
+      sender_phone TEXT,
       subject TEXT,
       message TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       is_read INTEGER DEFAULT 0
     )
   `);
+
+  const profileColumns = await dbAll<{ name: string }>('PRAGMA table_info(profile)');
+  const needsEducationMigration = !profileColumns.some((column) => column.name === 'education');
+  const needsCertificateMigration = !profileColumns.some((column) => column.name === 'certificates');
+  if (needsEducationMigration) {
+    await dbRun("ALTER TABLE profile ADD COLUMN education TEXT NOT NULL DEFAULT '[]'");
+  }
+  if (needsCertificateMigration) {
+    await dbRun("ALTER TABLE profile ADD COLUMN certificates TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  const messageColumns = await dbAll<{ name: string }>('PRAGMA table_info(messages)');
+  if (!messageColumns.some((column) => column.name === 'sender_phone')) {
+    await dbRun('ALTER TABLE messages ADD COLUMN sender_phone TEXT');
+  }
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      migration TEXT PRIMARY KEY,
+      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  const portfolioContentMigration = await dbGet<{ migration: string }>(
+    'SELECT migration FROM schema_migrations WHERE migration = ?',
+    ['portfolio_content_defaults_v1']
+  );
+  if (!portfolioContentMigration) {
+    await dbRun('UPDATE profile SET education = ? WHERE education IS NULL OR education = ?', [
+      JSON.stringify(DEFAULT_EDUCATION),
+      '[]'
+    ]);
+    await dbRun('UPDATE profile SET certificates = ? WHERE certificates IS NULL OR certificates = ?', [
+      JSON.stringify(DEFAULT_CERTIFICATES),
+      '[]'
+    ]);
+    await dbRun('INSERT INTO schema_migrations (migration) VALUES (?)', ['portfolio_content_defaults_v1']);
+  }
 
   // 5. Automated Seeding
   await seedInitialData();
@@ -200,8 +251,8 @@ async function seedInitialData() {
     ]);
 
     await dbRun(
-      `INSERT INTO profile (name, title, bio, avatar_url, email, github_url, linkedin_url, twitter_url, website_url, resume_url, skills)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO profile (name, title, bio, avatar_url, email, github_url, linkedin_url, twitter_url, website_url, resume_url, skills, education, certificates)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         'Alex Rivera',
         'Senior CS Student & Full-Stack Engineer',
@@ -213,7 +264,9 @@ async function seedInitialData() {
         'https://twitter.com/alexrivera_dev',
         'https://alexrivera.dev',
         '#',
-        defaultSkills
+        defaultSkills,
+        JSON.stringify(DEFAULT_EDUCATION),
+        JSON.stringify(DEFAULT_CERTIFICATES)
       ]
     );
     console.log('✅ [DB Seed] Default student profile seeded');
